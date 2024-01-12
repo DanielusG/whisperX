@@ -22,7 +22,7 @@ FRAMES_PER_SECOND = exact_div(SAMPLE_RATE, HOP_LENGTH)  # 10ms per audio frame
 TOKENS_PER_SECOND = exact_div(SAMPLE_RATE, N_SAMPLES_PER_TOKEN)  # 20ms per audio token
 
 
-def load_audio(file: str, sr: int = SAMPLE_RATE):
+def load_audio(file: str, start: int, stop: int, sr: int = SAMPLE_RATE):
     """
     Open an audio file and read as mono waveform, resampling as necessary
 
@@ -56,6 +56,10 @@ def load_audio(file: str, sr: int = SAMPLE_RATE):
             "pcm_s16le",
             "-ar",
             str(sr),
+            "-ss",
+            str(start),
+            "-to",
+            str(stop),
             "-",
         ]
         out = subprocess.run(cmd, capture_output=True, check=True).stdout
