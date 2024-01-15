@@ -26,7 +26,7 @@ DEFAULT_ALIGN_MODELS_TORCH = {
     "fr": "VOXPOPULI_ASR_BASE_10K_FR",
     "de": "VOXPOPULI_ASR_BASE_10K_DE",
     "es": "VOXPOPULI_ASR_BASE_10K_ES",
-    "it": "VOXPOPULI_ASR_BASE_10K_IT",
+    "it": "facebook/wav2vec2-xls-r-2b",
 }
 
 DEFAULT_ALIGN_MODELS_HF = {
