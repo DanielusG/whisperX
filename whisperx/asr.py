@@ -300,6 +300,7 @@ class FasterWhisperPipeline(Pipeline):
             segment = out['text']
             if batch_size in [0, 1, None]:
                 segment = segment[0]
+            self.fix_start_offset_segments(segment, vad_segments[idx]['start'])
             segments.append(
                 {
                     "segment": segment,
@@ -320,7 +321,10 @@ class FasterWhisperPipeline(Pipeline):
             self.stop_signal.put(True)
             self.gpu_info.join()
         return {"segments": segments, "language": language}
-
+    def fix_start_offset_segments(self, segment, start_offset):
+        for word in segment["segment_analisys"]:
+            word["start"] += start_offset
+            word["end"] += start_offset
     def detect_language(self, audio: np.ndarray):
         if audio.shape[0] < N_SAMPLES:
             print(
