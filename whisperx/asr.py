@@ -10,7 +10,8 @@ import numpy as np
 import torch
 from transformers import Pipeline
 from transformers.pipelines.pt_utils import PipelineIterator
-from multiprocessing import Process
+from threading import Thread
+from queue import Queue, Empty
 from .audio import N_SAMPLES, SAMPLE_RATE, load_audio, log_mel_spectrogram
 from .types import TranscriptionResult, SingleSegment
 pynvml.nvmlInit()
@@ -145,7 +146,8 @@ class FasterWhisperPipeline(Pipeline):
     # TODO:
     # - add support for timestamp mode
     # - add support for custom inference kwargs
-    gpu_info: Process
+    gpu_info: Thread
+    stop_signal: Queue
     def __init__(
             self,
             model,
@@ -232,14 +234,21 @@ class FasterWhisperPipeline(Pipeline):
                 pynvml.nvmlDeviceGetHandleByIndex(0)).used / 1024**2
             print(f"Current VRAM usage: {vram:.2f}MB")
             time.sleep(1)
+            try:
+                data = self.stop_signal.get(block=False)
+                break
+            except Empty:
+                pass
     def transcribe(
         self, audio: Union[str, np.ndarray], batch_size=None, num_workers=0, language=None, task=None, chunk_size=30, print_progress=False, combined_progress=False, show_gpu_info=False
     ) -> TranscriptionResult:
         if isinstance(audio, str):
             audio = load_audio(audio)
         if show_gpu_info:
-            self.gpu_info = Process(target=self._print_gpu_info)
+            self.gpu_info = Thread(target=self._print_gpu_info)
+            self.stop_signal = Queue()
             self.gpu_info.start()
+
         def data(audio, segments):
             for seg in segments:
                 f1 = int(seg['start'] * SAMPLE_RATE)
@@ -306,7 +315,8 @@ class FasterWhisperPipeline(Pipeline):
             self.options = self.options._replace(
                 suppress_tokens=previous_suppress_tokens)
         if show_gpu_info:
-            self.gpu_info.terminate()
+            self.stop_signal.put(True)
+            self.gpu_info.join()
         return {"segments": segments, "language": language}
 
     def detect_language(self, audio: np.ndarray):
