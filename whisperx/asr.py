@@ -114,18 +114,6 @@ class WhisperModel(faster_whisper.WhisperModel):
                 )
             ])
 
-            # words, word_tokens = tokenizer.split_to_word_tokens(
-            #     tokens_batch[segment[0]] + [tokenizer.eot]
-            # )
-            # i: int = 0
-            # for tokens in enumerate(word_tokens):
-            #     word_token_probabilities = []
-            #     for token in tokens[1]:
-            #         if token < tokenizer.eot:
-            #             word_token_probabilities.append(probabilities[segment[0]].text_token_probs[i])
-            #             i += 1
-            #     word_probabilities.append([words[tokens[0]], np.mean(word_token_probabilities)])
-
         def decode_batch(tokens: List[List[int]]) -> str:
             res = []
             for tk in tokens:
