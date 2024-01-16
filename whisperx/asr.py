@@ -240,8 +240,9 @@ class FasterWhisperPipeline(Pipeline):
             except Empty:
                 pass
     def transcribe(
-        self, audio: Union[str, np.ndarray], batch_size=None, num_workers=0, language=None, task=None, chunk_size=30, print_progress=False, combined_progress=False, show_gpu_info=False
+        self, audio: Union[str, np.ndarray], batch_size=None, num_workers=0, language=None, task=None, chunk_size=30, print_progress=False, combined_progress=False, show_gpu_info=False, callback_on_progress=None
     ) -> TranscriptionResult:
+        assert print_progress and callback_on_progress is not None or not print_progress, "callback_on_progress must be provided if print_progress is True"
         if isinstance(audio, str):
             audio = load_audio(audio)
         if show_gpu_info:
@@ -294,6 +295,7 @@ class FasterWhisperPipeline(Pipeline):
                 base_progress = ((idx + 1) / total_segments) * 100
                 percent_complete = base_progress / 2 if combined_progress else base_progress
                 # Calculate how much VRAM is being used
+                callback_on_progress(percent_complete)
                 print(f"Progress: {percent_complete:.2f}%...")
             segment = out['text']
             if batch_size in [0, 1, None]:
