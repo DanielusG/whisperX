@@ -1,7 +1,7 @@
 import os
 import warnings
 from typing import List, Union, Optional, NamedTuple
-
+import pynvml
 import ctranslate2
 import faster_whisper
 from faster_whisper.tokenizer import Tokenizer
@@ -10,11 +10,10 @@ import numpy as np
 import torch
 from transformers import Pipeline
 from transformers.pipelines.pt_utils import PipelineIterator
-
+from multiprocessing import Process
 from .audio import N_SAMPLES, SAMPLE_RATE, load_audio, log_mel_spectrogram
-from .vad import load_vad_model, merge_chunks
 from .types import TranscriptionResult, SingleSegment
-
+pynvml.nvmlInit()
 
 def find_numeral_symbol_tokens(tokenizer):
     numeral_symbol_tokens = []
@@ -158,12 +157,10 @@ class FasterWhisperPipeline(Pipeline):
     # TODO:
     # - add support for timestamp mode
     # - add support for custom inference kwargs
-
+    gpu_info: Process
     def __init__(
             self,
             model,
-            vad,
-            vad_params: dict,
             options: NamedTuple,
             tokenizer=None,
             device: Union[int, str, "torch.device"] = -1,
@@ -196,8 +193,6 @@ class FasterWhisperPipeline(Pipeline):
             self.device = device
 
         super(Pipeline, self).__init__()
-        self.vad_model = vad
-        self._vad_params = vad_params
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_kwargs = {}
@@ -240,13 +235,23 @@ class FasterWhisperPipeline(Pipeline):
         final_iterator = PipelineIterator(
             model_iterator, self.postprocess, postprocess_params)
         return final_iterator
-
+    def _print_gpu_info(self):
+        import time
+        import pynvml
+        pynvml.nvmlInit()
+        while True:
+            vram = pynvml.nvmlDeviceGetMemoryInfo(
+                pynvml.nvmlDeviceGetHandleByIndex(0)).used / 1024**2
+            print(f"Current VRAM usage: {vram:.2f}MB")
+            time.sleep(1)
     def transcribe(
-        self, audio: Union[str, np.ndarray], batch_size=None, num_workers=0, language=None, task=None, chunk_size=30, print_progress=False, combined_progress=False
+        self, audio: Union[str, np.ndarray], batch_size=None, num_workers=0, language=None, task=None, chunk_size=30, print_progress=False, combined_progress=False, show_gpu_info=False
     ) -> TranscriptionResult:
         if isinstance(audio, str):
             audio = load_audio(audio)
-
+        if show_gpu_info:
+            self.gpu_info = Process(target=self._print_gpu_info)
+            self.gpu_info.start()
         def data(audio, segments):
             for seg in segments:
                 f1 = int(seg['start'] * SAMPLE_RATE)
@@ -283,7 +288,7 @@ class FasterWhisperPipeline(Pipeline):
             new_suppressed_tokens = list(set(new_suppressed_tokens))
             self.options = self.options._replace(
                 suppress_tokens=new_suppressed_tokens)
-
+        
         segments: List[SingleSegment] = []
         batch_size = batch_size or self._batch_size
         total_segments = len(vad_segments)
@@ -291,6 +296,7 @@ class FasterWhisperPipeline(Pipeline):
             if print_progress:
                 base_progress = ((idx + 1) / total_segments) * 100
                 percent_complete = base_progress / 2 if combined_progress else base_progress
+                # Calculate how much VRAM is being used
                 print(f"Progress: {percent_complete:.2f}%...")
             segment = out['text']
             if batch_size in [0, 1, None]:
@@ -311,7 +317,8 @@ class FasterWhisperPipeline(Pipeline):
         if self.suppress_numerals:
             self.options = self.options._replace(
                 suppress_tokens=previous_suppress_tokens)
-
+        if show_gpu_info:
+            self.gpu_info.terminate()
         return {"segments": segments, "language": language}
 
     def detect_language(self, audio: np.ndarray):
@@ -337,8 +344,6 @@ def load_model(whisper_arch,
                compute_type="float16",
                asr_options=None,
                language: Optional[str] = None,
-               vad_model=None,
-               vad_options=None,
                model: Optional[WhisperModel] = None,
                task="transcribe",
                download_root=None,
@@ -407,26 +412,10 @@ def load_model(whisper_arch,
     default_asr_options = faster_whisper.transcribe.TranscriptionOptions(
         **default_asr_options)
 
-    default_vad_options = {
-        "vad_onset": 0.500,
-        "vad_offset": 0.363
-    }
-
-    if vad_options is not None:
-        default_vad_options.update(vad_options)
-
-    if vad_model is not None:
-        vad_model = vad_model
-    else:
-        vad_model = load_vad_model(torch.device(
-            device), use_auth_token=None, **default_vad_options)
-
     return FasterWhisperPipeline(
         model=model,
-        vad=vad_model,
         options=default_asr_options,
         tokenizer=tokenizer,
         language=language,
         suppress_numerals=suppress_numerals,
-        vad_params=default_vad_options,
     )

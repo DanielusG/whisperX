@@ -9,7 +9,6 @@ import torch
 from .alignment import align, load_align_model
 from .asr import load_model
 from .audio import load_audio
-from .diarize import DiarizationPipeline, assign_word_speakers
 from .utils import (LANGUAGES, TO_LANGUAGE_CODE, get_writer, optional_float,
                     optional_int, str2bool)
 
@@ -209,18 +208,6 @@ def cli():
         gc.collect()
         torch.cuda.empty_cache()
 
-    # >> Diarize
-    if diarize:
-        if hf_token is None:
-            print("Warning, no --hf_token used, needs to be saved in environment variable, otherwise will throw error loading diarization model...")
-        tmp_results = results
-        print(">>Performing diarization...")
-        results = []
-        diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=device)
-        for result, input_audio_path in tmp_results:
-            diarize_segments = diarize_model(input_audio_path, min_speakers=min_speakers, max_speakers=max_speakers)
-            result = assign_word_speakers(diarize_segments, result)
-            results.append((result, input_audio_path))
     # >> Write
     for result, audio_path in results:
         result["language"] = align_language
