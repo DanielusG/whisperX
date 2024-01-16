@@ -6,7 +6,6 @@ import warnings
 import numpy as np
 import torch
 
-from .alignment import align, load_align_model
 from .asr import load_model
 from .audio import load_audio
 from .utils import (LANGUAGES, TO_LANGUAGE_CODE, get_writer, optional_float,
@@ -179,34 +178,6 @@ def cli():
     del model
     gc.collect()
     torch.cuda.empty_cache()
-
-    # Part 2: Align Loop
-    if not no_align:
-        tmp_results = results
-        results = []
-        align_model, align_metadata = load_align_model(align_language, device, model_name=align_model)
-        for result, audio_path in tmp_results:
-            # >> Align
-            if len(tmp_results) > 1:
-                input_audio = audio_path
-            else:
-                # lazily load audio from part 1
-                input_audio = audio
-
-            if align_model is not None and len(result["segments"]) > 0:
-                if result.get("language", "en") != align_metadata["language"]:
-                    # load new language
-                    print(f"New language found ({result['language']})! Previous was ({align_metadata['language']}), loading new alignment model for new language...")
-                    align_model, align_metadata = load_align_model(result["language"], device)
-                print(">>Performing alignment...")
-                result = align(result["segments"], align_model, align_metadata, input_audio, device, interpolate_method=interpolate_method, return_char_alignments=return_char_alignments, print_progress=print_progress)
-
-            results.append((result, audio_path))
-
-        # Unload align model
-        del align_model
-        gc.collect()
-        torch.cuda.empty_cache()
 
     # >> Write
     for result, audio_path in results:
