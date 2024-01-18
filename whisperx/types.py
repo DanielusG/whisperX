@@ -8,7 +8,8 @@ class SingleWordSegment(TypedDict):
     word: str
     start: float
     end: float
-    score: float
+    tokens: List[int]
+    probability: List
 
 class SingleCharSegment(TypedDict):
     """
@@ -24,10 +25,8 @@ class SingleSegment(TypedDict):
     """
     A single segment (up to multiple sentences) of a speech.
     """
-
-    start: float
-    end: float
-    text: str
+    text_segment: str
+    segment_analisys: List[SingleWordSegment]
 
 
 class SingleAlignedSegment(TypedDict):
